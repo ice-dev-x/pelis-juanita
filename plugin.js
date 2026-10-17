@@ -42,15 +42,15 @@ export async function home() {
 
   if (moviesRes.ok) {
     const moviesJson = await moviesRes.json();
-    categories.push({ id: "h-movies", title: "🎬 Películas Recientes", ref: "movie", items: extractItems(moviesJson.items) });
+    categories.push({ id: "h-movies", title: "Películas Recientes", ref: "movie", items: extractItems(moviesJson.items) });
   }
   if (seriesRes.ok) {
     const seriesJson = await seriesRes.json();
-    categories.push({ id: "h-series", title: "📺 Series Recientes", ref: "serie", items: extractItems(seriesJson.items) });
+    categories.push({ id: "h-series", title: "Series Recientes", ref: "serie", items: extractItems(seriesJson.items) });
   }
   if (animeRes.ok) {
     const animeJson = await animeRes.json();
-    categories.push({ id: "h-anime", title: "🎌 Anime", ref: "anime", items: extractItems(animeJson.items) });
+    categories.push({ id: "h-anime", title: "Anime", ref: "anime", items: extractItems(animeJson.items) });
   }
 
   return categories;
