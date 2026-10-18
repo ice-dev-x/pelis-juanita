@@ -33,44 +33,47 @@ function extractItems(items) {
   }).filter(i => i.ref !== null);
 }
 
-// --- HOME (Pantalla principal de la app) ---
+// --- HOME (Pantalla principal de la app clonando la API nativa) ---
 export async function home() {
-  const reqHeaders = { "User-Agent": UA, "Referer": `${BASE_URL}/` };
-  
-  const fetchApiList = async (url) => {
-    try {
-      const res = await kino.fetch(url, { headers: reqHeaders });
-      if (res.ok) {
-        const json = await res.json();
-        return extractItems(json.items || []);
+  try {
+    const res = await kino.fetch(`${API_URL}/home`, { 
+      headers: { "User-Agent": UA, "Referer": `${BASE_URL}/` } 
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    
+    const categories = [];
+    
+    // Leemos el arreglo 'rows' que ya viene ordenado desde el servidor
+    if (json.rows && Array.isArray(json.rows)) {
+      for (const row of json.rows) {
+        if (row.items && row.items.length > 0) {
+          
+          // Mapeamos el título para que el scroll infinito (browse) sepa qué cargar luego
+          let refTarget = "peliculas";
+          const lowerTitle = (row.title || "").toLowerCase();
+          if (lowerTitle.includes("serie")) refTarget = "series";
+          else if (lowerTitle.includes("anime")) refTarget = "anime";
+          else if (lowerTitle.includes("novela")) refTarget = "novelas";
+          else if (lowerTitle.includes("wwe")) refTarget = "wwe";
+          else if (lowerTitle.includes("estreno")) refTarget = "genre-estrenos";
+          else if (lowerTitle.includes("popular")) refTarget = "populares";
+
+          categories.push({
+            id: row.config && row.config.id ? row.config.id : `row-${categories.length}`,
+            title: row.title,
+            ref: refTarget,
+            items: extractItems(row.items)
+          });
+        }
       }
-    } catch (e) {}
+    }
+    return categories;
+  } catch (e) {
     return [];
-  };
-
-  const [estrenos, peliculas, series, animes, novelas, wwe, populares] = await Promise.all([
-    fetchApiList(`${API_URL}/listing?kind=movie&order=trending_7d&limit=24&page=1`),
-    fetchApiList(`${API_URL}/listing?kind=movie&order=recent&limit=24&page=1`),
-    fetchApiList(`${API_URL}/listing?kind=serie&order=recent&limit=24&page=1`),
-    fetchApiList(`${API_URL}/listing?kind=anime&order=recent&limit=24&page=1`),
-    fetchApiList(`${API_URL}/listing?kind=novel&order=recent&limit=24&page=1`),
-    fetchApiList(`${API_URL}/listing?kind=wwe&order=recent&limit=24&page=1`),
-    fetchApiList(`${API_URL}/listing?order=popular&limit=24&page=1`)
-  ]);
-
-  const categories = [];
-
-  // Usamos "trending_7d" como ref para capturarlo en el browse
-  if (estrenos.length > 0) categories.push({ id: "h-est", title: "Últimos Estrenos", ref: "trending_7d", items: estrenos });
-  if (peliculas.length > 0) categories.push({ id: "h-mov", title: "Películas Recientes", ref: "peliculas", items: peliculas });
-  if (series.length > 0) categories.push({ id: "h-ser", title: "Series Recientes", ref: "series", items: series });
-  if (animes.length > 0) categories.push({ id: "h-ani", title: "Anime Reciente", ref: "anime", items: animes });
-  if (novelas.length > 0) categories.push({ id: "h-nov", title: "Novelas Recientes", ref: "novelas", items: novelas });
-  if (wwe.length > 0) categories.push({ id: "h-wwe", title: "WWE Reciente", ref: "wwe", items: wwe });
-  if (populares.length > 0) categories.push({ id: "h-pop", title: "Populares", ref: "populares", items: populares });
-
-  return categories;
+  }
 }
+
 
 // --- SECCIÓN (Pestañas Superiores) ---
 export async function section({ tab } = {}) {
@@ -99,29 +102,45 @@ export async function section({ tab } = {}) {
     return [];
   };
 
+  // 1. Si estamos en Inicio, usamos el super-endpoint /home
   if (chosen === "inicio") {
-    const [estrenos, peliculas, series, animes, novelas, wwe, populares] = await Promise.all([
-      fetchApiList(`${API_URL}/listing?kind=movie&order=trending_7d&limit=24&page=1`),
-      fetchApiList(`${API_URL}/listing?kind=movie&order=recent&limit=24&page=1`),
-      fetchApiList(`${API_URL}/listing?kind=serie&order=recent&limit=24&page=1`),
-      fetchApiList(`${API_URL}/listing?kind=anime&order=recent&limit=24&page=1`),
-      fetchApiList(`${API_URL}/listing?kind=novel&order=recent&limit=24&page=1`),
-      fetchApiList(`${API_URL}/listing?kind=wwe&order=recent&limit=24&page=1`),
-      fetchApiList(`${API_URL}/listing?order=popular&limit=24&page=1`)
-    ]);
+    try {
+      const res = await kino.fetch(`${API_URL}/home`, { headers: reqHeaders });
+      if (res.ok) {
+        const json = await res.json();
+        
+        // Extraemos el banner dinámico directamente del bloque 'hero' de la API
+        if (json.hero && json.hero.items && json.hero.items.length > 0) {
+          heroItem = json.hero.items[0];
+        }
 
-    if (estrenos.length > 0) heroItem = estrenos[0];
-    else if (peliculas.length > 0) heroItem = peliculas[0];
+        // Poblamos las filas tal como lo hicimos en la función home
+        if (json.rows && Array.isArray(json.rows)) {
+          for (const row of json.rows) {
+            if (row.items && row.items.length > 0) {
+              let refTarget = "peliculas";
+              const lowerTitle = (row.title || "").toLowerCase();
+              if (lowerTitle.includes("serie")) refTarget = "series";
+              else if (lowerTitle.includes("anime")) refTarget = "anime";
+              else if (lowerTitle.includes("novela")) refTarget = "novelas";
+              else if (lowerTitle.includes("wwe")) refTarget = "wwe";
+              else if (lowerTitle.includes("estreno")) refTarget = "genre-estrenos";
+              else if (lowerTitle.includes("popular")) refTarget = "populares";
 
-    if (estrenos.length > 0) rows.push({ id: "r-est", title: "Últimos Estrenos", ref: "trending_7d", items: estrenos });
-    if (peliculas.length > 0) rows.push({ id: "r-mov", title: "Películas Recientes", ref: "peliculas", items: peliculas });
-    if (series.length > 0) rows.push({ id: "r-ser", title: "Series Recientes", ref: "series", items: series });
-    if (animes.length > 0) rows.push({ id: "r-ani", title: "Anime Reciente", ref: "anime", items: animes });
-    if (novelas.length > 0) rows.push({ id: "r-nov", title: "Novelas Recientes", ref: "novelas", items: novelas });
-    if (wwe.length > 0) rows.push({ id: "r-wwe", title: "WWE Reciente", ref: "wwe", items: wwe });
-    if (populares.length > 0) rows.push({ id: "r-pop", title: "Populares", ref: "populares", items: populares });
-
+              rows.push({
+                id: row.config && row.config.id ? row.config.id : `r-${rows.length}`,
+                title: row.title,
+                ref: refTarget,
+                items: extractItems(row.items)
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {}
   } 
+  
+  // 2. Lógica de Pestaña Géneros
   else if (chosen === "generos") {
     const [terror, animacion, fantasia] = await Promise.all([
       fetchApiList(`${API_URL}/taxonomies/genre/terror?page=1&limit=30`),
@@ -134,8 +153,9 @@ export async function section({ tab } = {}) {
     if (terror.length > 0) rows.push({ id: "r-terror", title: "Terror", ref: "genre-terror", items: terror });
     if (animacion.length > 0) rows.push({ id: "r-anim", title: "Animación", ref: "genre-animacion", items: animacion });
     if (fantasia.length > 0) rows.push({ id: "r-fan", title: "Fantasía", ref: "genre-fantasia", items: fantasia });
-
   } 
+  
+  // 3. Lógica de Pestañas Individuales (Películas, Series, Anime)
   else {
     const kindMap = { "peliculas": "movie", "series": "serie", "anime": "anime" };
     const items = await fetchApiList(`${API_URL}/listing?kind=${kindMap[chosen]}&order=recent&limit=24&page=1`);
@@ -145,9 +165,14 @@ export async function section({ tab } = {}) {
     if (items.length > 0) rows.push({ id: `r-${chosen}`, title: `Catálogo de ${rowTitle}`, ref: chosen, items: items });
   }
 
+  // Renderizamos el Hero Banner final
   let hero = { title: "Pelis Juanita", text: "El mejor entretenimiento." };
   if (heroItem) {
-    hero = { title: heroItem.title, text: "Explora este contenido destacado.", image: heroItem.backdrop || heroItem.poster };
+    hero = { 
+      title: heroItem.title, 
+      text: heroItem.overview || "Explora este contenido destacado.", 
+      image: getImgUrl(heroItem.backdrop_path, "w1280") || getImgUrl(heroItem.poster_path, "w500") 
+    };
   }
 
   return { tabs, tab: chosen, hero, rows };
