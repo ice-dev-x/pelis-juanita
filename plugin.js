@@ -43,21 +43,42 @@ export async function home() {
     const json = await res.json();
     
     const categories = [];
-    
-    // Leemos el arreglo 'rows' que ya viene ordenado desde el servidor
+    const currentYear = new Date().getFullYear();
+
+    // Inyectamos manualmente la nueva fila "Estrenos del Año" al principio
+    try {
+      const yearRes = await kino.fetch(`${API_URL}/taxonomies/year/${currentYear}?page=1&limit=30`, { 
+        headers: { "User-Agent": UA, "Referer": `${BASE_URL}/` } 
+      });
+      if (yearRes.ok) {
+        const yearJson = await yearRes.json();
+        if (yearJson.items && yearJson.items.length > 0) {
+          categories.push({
+            id: `row-estrenos-year`,
+            title: `Estrenos ${currentYear}`,
+            ref: `year-${currentYear}`, // Referencia dinámica para browse
+            items: extractItems(yearJson.items)
+          });
+        }
+      }
+    } catch (e) {}
+
+    // Leemos el arreglo 'rows' que ya viene ordenado desde el servidor, OMITIENDO populares
     if (json.rows && Array.isArray(json.rows)) {
       for (const row of json.rows) {
         if (row.items && row.items.length > 0) {
           
-          // Mapeamos el título para que el scroll infinito (browse) sepa qué cargar luego
           let refTarget = "peliculas";
-          const lowerTitle = (row.title || "").toLowerCase();
+          const lowerTitle = String(row.title || "").toLowerCase();
+          
+          // Omitimos la fila Popular
+          if (lowerTitle.includes("popular")) continue;
+
           if (lowerTitle.includes("serie")) refTarget = "series";
           else if (lowerTitle.includes("anime")) refTarget = "anime";
           else if (lowerTitle.includes("novela")) refTarget = "novelas";
           else if (lowerTitle.includes("wwe")) refTarget = "wwe";
           else if (lowerTitle.includes("estreno")) refTarget = "genre-estrenos";
-          else if (lowerTitle.includes("popular")) refTarget = "populares";
 
           categories.push({
             id: row.config && row.config.id ? row.config.id : `row-${categories.length}`,
@@ -74,7 +95,6 @@ export async function home() {
   }
 }
 
-
 // --- SECCIÓN (Pestañas Superiores) ---
 export async function section({ tab } = {}) {
   const tabs = [
@@ -87,6 +107,7 @@ export async function section({ tab } = {}) {
 
   const chosen = tabs.some((t) => t.id === tab) ? tab : "inicio";
   const reqHeaders = { "User-Agent": UA, "Referer": `${BASE_URL}/` };
+  const currentYear = new Date().getFullYear();
   
   const rows = [];
   let heroItem = null;
@@ -102,30 +123,43 @@ export async function section({ tab } = {}) {
     return [];
   };
 
-  // 1. Si estamos en Inicio, usamos el super-endpoint /home
   if (chosen === "inicio") {
     try {
       const res = await kino.fetch(`${API_URL}/home`, { headers: reqHeaders });
       if (res.ok) {
         const json = await res.json();
         
-        // Extraemos el banner dinámico directamente del bloque 'hero' de la API
         if (json.hero && json.hero.items && json.hero.items.length > 0) {
           heroItem = json.hero.items[0];
         }
 
-        // Poblamos las filas tal como lo hicimos en la función home
+        // Inyectamos Estrenos del Año en Pestaña Inicio
+        try {
+          const yearItems = await fetchApiList(`${API_URL}/taxonomies/year/${currentYear}?page=1&limit=30`);
+          if (yearItems.length > 0) {
+            rows.push({
+              id: `r-estrenos-year`,
+              title: `Estrenos ${currentYear}`,
+              ref: `year-${currentYear}`, 
+              items: yearItems
+            });
+          }
+        } catch(e) {}
+
         if (json.rows && Array.isArray(json.rows)) {
           for (const row of json.rows) {
             if (row.items && row.items.length > 0) {
               let refTarget = "peliculas";
-              const lowerTitle = (row.title || "").toLowerCase();
+              const lowerTitle = String(row.title || "").toLowerCase();
+              
+              // Omitimos la fila Popular
+              if (lowerTitle.includes("popular")) continue;
+
               if (lowerTitle.includes("serie")) refTarget = "series";
               else if (lowerTitle.includes("anime")) refTarget = "anime";
               else if (lowerTitle.includes("novela")) refTarget = "novelas";
               else if (lowerTitle.includes("wwe")) refTarget = "wwe";
               else if (lowerTitle.includes("estreno")) refTarget = "genre-estrenos";
-              else if (lowerTitle.includes("popular")) refTarget = "populares";
 
               rows.push({
                 id: row.config && row.config.id ? row.config.id : `r-${rows.length}`,
@@ -139,8 +173,6 @@ export async function section({ tab } = {}) {
       }
     } catch (e) {}
   } 
-  
-  // 2. Lógica de Pestaña Géneros
   else if (chosen === "generos") {
     const [terror, animacion, fantasia] = await Promise.all([
       fetchApiList(`${API_URL}/taxonomies/genre/terror?page=1&limit=30`),
@@ -154,8 +186,6 @@ export async function section({ tab } = {}) {
     if (animacion.length > 0) rows.push({ id: "r-anim", title: "Animación", ref: "genre-animacion", items: animacion });
     if (fantasia.length > 0) rows.push({ id: "r-fan", title: "Fantasía", ref: "genre-fantasia", items: fantasia });
   } 
-  
-  // 3. Lógica de Pestañas Individuales (Películas, Series, Anime)
   else {
     const kindMap = { "peliculas": "movie", "series": "serie", "anime": "anime" };
     const items = await fetchApiList(`${API_URL}/listing?kind=${kindMap[chosen]}&order=recent&limit=24&page=1`);
@@ -165,13 +195,12 @@ export async function section({ tab } = {}) {
     if (items.length > 0) rows.push({ id: `r-${chosen}`, title: `Catálogo de ${rowTitle}`, ref: chosen, items: items });
   }
 
-  // Renderizamos el Hero Banner final
   let hero = { title: "Pelis Juanita", text: "El mejor entretenimiento." };
   if (heroItem) {
     hero = { 
       title: heroItem.title, 
       text: heroItem.overview || "Explora este contenido destacado.", 
-      image: getImgUrl(heroItem.backdrop_path, "w1280") || getImgUrl(heroItem.poster_path, "w500") 
+      image: getImgUrl(heroItem.backdrop_path || heroItem.backdrop, "w1280") || getImgUrl(heroItem.poster_path || heroItem.poster, "w500") 
     };
   }
 
@@ -192,13 +221,20 @@ export async function browse(ref, cursor) {
   else if (category === "populares") {
     apiUrl = `${API_URL}/listing?order=popular&limit=24&page=${page}`;
   }
-  else if (category === "trending_7d") {
+  else if (category === "genre-estrenos") {
+    // Nota: la API original para 'genre-estrenos' podría ser la que habíamos configurado antes. 
+    // Usaremos trending_7d para emular "Últimos Estrenos" si es la fila de la página de inicio.
     apiUrl = `${API_URL}/listing?kind=movie&order=trending_7d&limit=24&page=${page}`;
   }
   else if (category.startsWith("genre-")) {
     const genreName = category.replace("genre-", "");
     apiUrl = `${API_URL}/taxonomies/genre/${genreName}?page=${page}&limit=30`;
   } 
+  else if (category.startsWith("year-")) {
+    // Interceptamos la nueva categoría Estrenos del Año
+    const yearValue = category.replace("year-", "");
+    apiUrl = `${API_URL}/taxonomies/year/${yearValue}?page=${page}&limit=30`;
+  }
   else {
     return { items: [] };
   }
