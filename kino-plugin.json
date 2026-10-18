@@ -1,14 +1,14 @@
 {
   "id": "pelis-juanita",
   "name": "Pelis Juanita",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "apiVersion": 6,
   "browser": true,
   "entry": "plugin.js",
   "section": { "label": "Pelis Juanita" },
   "icon": "icon.png",
   "author": "sadmachine",
-  "description": "Catálogo completo de Pelis Juanita consumiendo su API REST nativa.",
+  "description": "Catálogo completo de Pelis Juanita consumiendo su API REST nativa, se puede elegir el idioma y subtitulos desde el botón cc",
   "color": "#bd1439",
   "theme": {
     "accent": "#bd1439",

@@ -219,6 +219,7 @@ export async function episodes(ref) {
   const json = await res.json();
   const item = json.item;
   
+  // 1. Armamos la metadata idéntica a Premiere
   const metadata = {
     overview: item.overview || "",
     year: item.year ? parseInt(item.year, 10) : null,
@@ -235,20 +236,13 @@ export async function episodes(ref) {
       season: 1,
       number: 1,
       ref: item.player_url || ref, 
-      title: "Reproducir",
-      overview: metadata.overview
+      title: "Reproducir Película",
+      overview: metadata.overview // Lo inyectamos directo en el episodio también
     });
     
-    // TRUCO PARA KINO: Exponer metadata en la raíz para películas
-    return { 
-      overview: metadata.overview,
-      year: metadata.year,
-      poster: metadata.poster,
-      backdrop: metadata.backdrop,
-      genres: metadata.genres,
-      movie: metadata, 
-      episodes: episodesList 
-    };
+    // EL TRUCO DE PREMIERE: Retornamos todo bajo la clave "series" para engañar a la UI del TV
+    return { series: metadata, episodes: episodesList };
+    
   } else {
     const itemId = item.catalog_item_id;
     const seasonsRes = await kino.fetch(`${API_URL}/episode-seasons?item_id=${itemId}`, { headers: reqHeaders });
@@ -289,17 +283,7 @@ export async function episodes(ref) {
     }
     
     episodesList.sort((a, b) => (a.season - b.season) || (a.number - b.number));
-    
-    // TRUCO PARA KINO: Exponer metadata en la raíz para series
-    return { 
-      overview: metadata.overview,
-      year: metadata.year,
-      poster: metadata.poster,
-      backdrop: metadata.backdrop,
-      genres: metadata.genres,
-      series: metadata, 
-      episodes: episodesList 
-    };
+    return { series: metadata, episodes: episodesList };
   }
 }
 
