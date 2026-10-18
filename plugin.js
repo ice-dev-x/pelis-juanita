@@ -176,6 +176,24 @@ export async function browse(ref, cursor) {
     next: (json.pagination && json.pagination.has_next) ? String(page + 1) : null 
   };
 }
+// --- BUSCADOR ---
+export async function search(query) {
+  if (!query || !query.q) return [];
+  const term = encodeURIComponent(query.q);
+  
+  try {
+    const res = await kino.fetch(`${API_URL}/search?q=${term}`, { 
+      headers: { "User-Agent": UA, "Referer": `${BASE_URL}/` } 
+    });
+    if (res.ok) {
+      const json = await res.json();
+      return extractItems(json.items);
+    }
+  } catch (e) {}
+  
+  return [];
+}
+
 
 
 // --- METADATOS Y EPISODIOS ---
