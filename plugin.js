@@ -17,7 +17,6 @@ function extractItems(items) {
     const isSerie = item.kind !== "movie" && item.kind !== "wwe";
     const refUrl = item.url ? (item.url.startsWith("http") ? item.url : `${BASE_URL}${item.url}`) : null;
     
-    // Obtenemos el poster vertical y el backdrop horizontal
     const posterImg = getImgUrl(item.poster_path, "w500");
     const backdropImg = getImgUrl(item.backdrop_path, "w780") || posterImg; 
     
@@ -27,8 +26,9 @@ function extractItems(items) {
       title: item.title,
       kind: isSerie ? "series" : "movie",
       poster: posterImg,
-      backdrop: backdropImg, // <- Esta es la clave para el modo Tarjetas
-      year: item.year ? parseInt(item.year, 10) : null
+      backdrop: backdropImg,
+      year: item.year ? parseInt(item.year, 10) : null,
+      overview: item.overview || item.description || "" // El secreto que usaba Premiere
     };
   }).filter(i => i.ref !== null);
 }
@@ -63,7 +63,6 @@ export async function home() {
 
 // --- SECCIÓN (Pestañas Superiores) ---
 export async function section({ tab } = {}) {
-  // Pestañas limpias y sin emojis
   const tabs = [
     { id: "inicio", label: "Inicio" },
     { id: "peliculas", label: "Películas" },
@@ -78,7 +77,6 @@ export async function section({ tab } = {}) {
   const rows = [];
   let heroItem = null;
 
-  // Llama a la API JSON (única función necesaria ahora)
   const fetchApiList = async (url) => {
     try {
       const res = await kino.fetch(url, { headers: reqHeaders });
@@ -91,37 +89,38 @@ export async function section({ tab } = {}) {
   };
 
   if (chosen === "inicio") {
-    const [movies, series, animes] = await Promise.all([
+    // Exactamente igual al home
+    const [estrenos, peliculas, series, animes, novelas, wwe, populares] = await Promise.all([
+      fetchApiList(`${API_URL}/taxonomies/genre/estrenos?page=1&limit=24`),
       fetchApiList(`${API_URL}/listing?kind=movie&order=recent&limit=24&page=1`),
       fetchApiList(`${API_URL}/listing?kind=serie&order=recent&limit=24&page=1`),
-      fetchApiList(`${API_URL}/listing?kind=anime&order=recent&limit=24&page=1`)
+      fetchApiList(`${API_URL}/listing?kind=anime&order=recent&limit=24&page=1`),
+      fetchApiList(`${API_URL}/listing?kind=novel&order=recent&limit=24&page=1`),
+      fetchApiList(`${API_URL}/listing?kind=wwe&order=recent&limit=24&page=1`),
+      fetchApiList(`${API_URL}/listing?order=popular&limit=24&page=1`)
     ]);
 
-    if (movies.length > 0) heroItem = movies[0];
-    else if (series.length > 0) heroItem = series[0];
+    if (estrenos.length > 0) heroItem = estrenos[0];
+    else if (peliculas.length > 0) heroItem = peliculas[0];
 
-    // Títulos limpios y elegantes
-    if (movies.length > 0) rows.push({ id: "r-mov", title: "Películas Recientes", ref: "peliculas", items: movies });
+    if (estrenos.length > 0) rows.push({ id: "r-est", title: "Últimos Estrenos", ref: "genre-estrenos", items: estrenos });
+    if (peliculas.length > 0) rows.push({ id: "r-mov", title: "Películas Recientes", ref: "peliculas", items: peliculas });
     if (series.length > 0) rows.push({ id: "r-ser", title: "Series Recientes", ref: "series", items: series });
     if (animes.length > 0) rows.push({ id: "r-ani", title: "Anime Reciente", ref: "anime", items: animes });
+    if (novelas.length > 0) rows.push({ id: "r-nov", title: "Novelas Recientes", ref: "novelas", items: novelas });
+    if (wwe.length > 0) rows.push({ id: "r-wwe", title: "WWE Reciente", ref: "wwe", items: wwe });
+    if (populares.length > 0) rows.push({ id: "r-pop", title: "Populares", ref: "populares", items: populares });
 
   } 
   else if (chosen === "generos") {
-    // Todo 100% desde la API
-    const [novelas, wwe, terror, animacion, fantasia] = await Promise.all([
-      fetchApiList(`${API_URL}/listing?kind=novel&order=recent&limit=24&page=1`),
-      fetchApiList(`${API_URL}/listing?kind=wwe&order=recent&limit=24&page=1`),
+    const [terror, animacion, fantasia] = await Promise.all([
       fetchApiList(`${API_URL}/taxonomies/genre/terror?page=1&limit=30`),
       fetchApiList(`${API_URL}/taxonomies/genre/animacion?page=1&limit=30`),
       fetchApiList(`${API_URL}/taxonomies/genre/fantasia?page=1&limit=30`)
     ]);
 
-    if (novelas.length > 0) heroItem = novelas[0];
-    else if (terror.length > 0) heroItem = terror[0];
+    if (terror.length > 0) heroItem = terror[0];
 
-    // Usamos prefijos 'genre-' en el ref para que browse sepa rutear a /taxonomies
-    if (novelas.length > 0) rows.push({ id: "r-nov", title: "Novelas", ref: "novelas", items: novelas });
-    if (wwe.length > 0) rows.push({ id: "r-wwe", title: "WWE", ref: "wwe", items: wwe });
     if (terror.length > 0) rows.push({ id: "r-terror", title: "Terror", ref: "genre-terror", items: terror });
     if (animacion.length > 0) rows.push({ id: "r-anim", title: "Animación", ref: "genre-animacion", items: animacion });
     if (fantasia.length > 0) rows.push({ id: "r-fan", title: "Fantasía", ref: "genre-fantasia", items: fantasia });
@@ -145,7 +144,7 @@ export async function section({ tab } = {}) {
 }
 
 
-// --- BROWSE (Paginación Dinámica y Elegante 100% API) ---
+// --- BROWSE (Paginación) ---
 export async function browse(ref, cursor) {
   const page = cursor ? parseInt(cursor, 10) : 1;
   const category = ref || "peliculas"; 
@@ -154,25 +153,21 @@ export async function browse(ref, cursor) {
   
   let apiUrl = "";
 
-  // 1. Si es una categoría principal o kind (películas, novelas, wwe...)
   if (kindMap[category]) {
     apiUrl = `${API_URL}/listing?kind=${kindMap[category]}&order=recent&limit=24&page=${page}`;
   } 
-  // 2. Si es una taxonomía de género descubierta con tu ruta (genre-terror, genre-animacion...)
+  else if (category === "populares") {
+    apiUrl = `${API_URL}/listing?order=popular&limit=24&page=${page}`;
+  }
   else if (category.startsWith("genre-")) {
     const genreName = category.replace("genre-", "");
     apiUrl = `${API_URL}/taxonomies/genre/${genreName}?page=${page}&limit=30`;
   } 
-  // Si no coincide, retornamos vacío
   else {
     return { items: [] };
   }
 
-  // Hacemos la consulta a la API
-  const res = await kino.fetch(apiUrl, { 
-    headers: { "User-Agent": UA, "Referer": `${BASE_URL}/` } 
-  });
-  
+  const res = await kino.fetch(apiUrl, { headers: { "User-Agent": UA, "Referer": `${BASE_URL}/` } });
   if (!res.ok) return { items: [] };
   const json = await res.json();
   
@@ -181,24 +176,6 @@ export async function browse(ref, cursor) {
     next: (json.pagination && json.pagination.has_next) ? String(page + 1) : null 
   };
 }
-// --- BUSCADOR ---
-export async function search(query) {
-  if (!query || !query.q) return [];
-  const term = encodeURIComponent(query.q);
-  
-  try {
-    const res = await kino.fetch(`${API_URL}/search?q=${term}`, { 
-      headers: { "User-Agent": UA, "Referer": `${BASE_URL}/` } 
-    });
-    if (res.ok) {
-      const json = await res.json();
-      return extractItems(json.items);
-    }
-  } catch (e) {}
-  
-  return [];
-}
-
 
 
 // --- METADATOS Y EPISODIOS ---
@@ -240,10 +217,13 @@ export async function episodes(ref) {
       overview: metadata.overview
     });
     
-    // CORRECCIÓN: Enviar como "movie" y exponer el overview en la raíz
+    // Esparcimos la metadata en la raíz para garantizar que Kino la lea
     return { 
-      movie: metadata, 
-      overview: metadata.overview, 
+      overview: metadata.overview,
+      year: metadata.year,
+      poster: metadata.poster,
+      backdrop: metadata.backdrop,
+      genres: metadata.genres,
       episodes: episodesList 
     };
     
