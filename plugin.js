@@ -33,30 +33,41 @@ function extractItems(items) {
   }).filter(i => i.ref !== null);
 }
 
-// --- HOME ---
+// --- HOME (Pantalla principal de la app) ---
 export async function home() {
   const reqHeaders = { "User-Agent": UA, "Referer": `${BASE_URL}/` };
   
-  const [moviesRes, seriesRes, animeRes] = await Promise.all([
-    kino.fetch(`${API_URL}/listing?kind=movie&order=recent&limit=24&page=1`, { headers: reqHeaders }),
-    kino.fetch(`${API_URL}/listing?kind=serie&order=recent&limit=24&page=1`, { headers: reqHeaders }),
-    kino.fetch(`${API_URL}/listing?kind=anime&order=recent&limit=24&page=1`, { headers: reqHeaders })
+  const fetchApiList = async (url) => {
+    try {
+      const res = await kino.fetch(url, { headers: reqHeaders });
+      if (res.ok) {
+        const json = await res.json();
+        return extractItems(json.items || []);
+      }
+    } catch (e) {}
+    return [];
+  };
+
+  const [estrenos, peliculas, series, animes, novelas, wwe, populares] = await Promise.all([
+    fetchApiList(`${API_URL}/listing?kind=movie&order=trending_7d&limit=24&page=1`),
+    fetchApiList(`${API_URL}/listing?kind=movie&order=recent&limit=24&page=1`),
+    fetchApiList(`${API_URL}/listing?kind=serie&order=recent&limit=24&page=1`),
+    fetchApiList(`${API_URL}/listing?kind=anime&order=recent&limit=24&page=1`),
+    fetchApiList(`${API_URL}/listing?kind=novel&order=recent&limit=24&page=1`),
+    fetchApiList(`${API_URL}/listing?kind=wwe&order=recent&limit=24&page=1`),
+    fetchApiList(`${API_URL}/listing?order=popular&limit=24&page=1`)
   ]);
 
   const categories = [];
 
-  if (moviesRes.ok) {
-    const moviesJson = await moviesRes.json();
-    categories.push({ id: "h-movies", title: "Películas Recientes", ref: "movie", items: extractItems(moviesJson.items) });
-  }
-  if (seriesRes.ok) {
-    const seriesJson = await seriesRes.json();
-    categories.push({ id: "h-series", title: "Series Recientes", ref: "serie", items: extractItems(seriesJson.items) });
-  }
-  if (animeRes.ok) {
-    const animeJson = await animeRes.json();
-    categories.push({ id: "h-anime", title: "Anime", ref: "anime", items: extractItems(animeJson.items) });
-  }
+  // Usamos "trending_7d" como ref para capturarlo en el browse
+  if (estrenos.length > 0) categories.push({ id: "h-est", title: "Últimos Estrenos", ref: "trending_7d", items: estrenos });
+  if (peliculas.length > 0) categories.push({ id: "h-mov", title: "Películas Recientes", ref: "peliculas", items: peliculas });
+  if (series.length > 0) categories.push({ id: "h-ser", title: "Series Recientes", ref: "series", items: series });
+  if (animes.length > 0) categories.push({ id: "h-ani", title: "Anime Reciente", ref: "anime", items: animes });
+  if (novelas.length > 0) categories.push({ id: "h-nov", title: "Novelas Recientes", ref: "novelas", items: novelas });
+  if (wwe.length > 0) categories.push({ id: "h-wwe", title: "WWE Reciente", ref: "wwe", items: wwe });
+  if (populares.length > 0) categories.push({ id: "h-pop", title: "Populares", ref: "populares", items: populares });
 
   return categories;
 }
@@ -89,9 +100,8 @@ export async function section({ tab } = {}) {
   };
 
   if (chosen === "inicio") {
-    // Exactamente igual al home
     const [estrenos, peliculas, series, animes, novelas, wwe, populares] = await Promise.all([
-      fetchApiList(`${API_URL}/taxonomies/genre/estrenos?page=1&limit=24`),
+      fetchApiList(`${API_URL}/listing?kind=movie&order=trending_7d&limit=24&page=1`),
       fetchApiList(`${API_URL}/listing?kind=movie&order=recent&limit=24&page=1`),
       fetchApiList(`${API_URL}/listing?kind=serie&order=recent&limit=24&page=1`),
       fetchApiList(`${API_URL}/listing?kind=anime&order=recent&limit=24&page=1`),
@@ -103,7 +113,7 @@ export async function section({ tab } = {}) {
     if (estrenos.length > 0) heroItem = estrenos[0];
     else if (peliculas.length > 0) heroItem = peliculas[0];
 
-    if (estrenos.length > 0) rows.push({ id: "r-est", title: "Últimos Estrenos", ref: "genre-estrenos", items: estrenos });
+    if (estrenos.length > 0) rows.push({ id: "r-est", title: "Últimos Estrenos", ref: "trending_7d", items: estrenos });
     if (peliculas.length > 0) rows.push({ id: "r-mov", title: "Películas Recientes", ref: "peliculas", items: peliculas });
     if (series.length > 0) rows.push({ id: "r-ser", title: "Series Recientes", ref: "series", items: series });
     if (animes.length > 0) rows.push({ id: "r-ani", title: "Anime Reciente", ref: "anime", items: animes });
@@ -143,14 +153,12 @@ export async function section({ tab } = {}) {
   return { tabs, tab: chosen, hero, rows };
 }
 
-
 // --- BROWSE (Paginación) ---
 export async function browse(ref, cursor) {
   const page = cursor ? parseInt(cursor, 10) : 1;
   const category = ref || "peliculas"; 
   
   const kindMap = { "peliculas": "movie", "series": "serie", "anime": "anime", "novelas": "novel", "wwe": "wwe" };
-  
   let apiUrl = "";
 
   if (kindMap[category]) {
@@ -158,6 +166,9 @@ export async function browse(ref, cursor) {
   } 
   else if (category === "populares") {
     apiUrl = `${API_URL}/listing?order=popular&limit=24&page=${page}`;
+  }
+  else if (category === "trending_7d") {
+    apiUrl = `${API_URL}/listing?kind=movie&order=trending_7d&limit=24&page=${page}`;
   }
   else if (category.startsWith("genre-")) {
     const genreName = category.replace("genre-", "");
