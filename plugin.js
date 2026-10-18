@@ -17,12 +17,17 @@ function extractItems(items) {
     const isSerie = item.kind !== "movie" && item.kind !== "wwe";
     const refUrl = item.url ? (item.url.startsWith("http") ? item.url : `${BASE_URL}${item.url}`) : null;
     
+    // Obtenemos el poster vertical y el backdrop horizontal
+    const posterImg = getImgUrl(item.poster_path, "w500");
+    const backdropImg = getImgUrl(item.backdrop_path, "w780") || posterImg; 
+    
     return {
       id: `pj-${item.catalog_item_id || item.title.replace(/\s+/g, '-')}`,
       ref: refUrl,
       title: item.title,
       kind: isSerie ? "series" : "movie",
-      poster: getImgUrl(item.poster_path),
+      poster: posterImg,
+      backdrop: backdropImg, // <- Esta es la clave para el modo Tarjetas
       year: item.year ? parseInt(item.year, 10) : null
     };
   }).filter(i => i.ref !== null);
@@ -196,11 +201,10 @@ export async function search(query) {
 
 
 
-// --- METADATOS Y EPISODIOS (El núcleo de la API) ---
+// --- METADATOS Y EPISODIOS ---
 export async function episodes(ref) {
-  // Ej: ref = "https://pelisjuanita.org/pelicula/el-hoyo-2"
   const urlObj = new URL(ref);
-  const parts = urlObj.pathname.split('/').filter(Boolean); // ["pelicula", "el-hoyo-2"]
+  const parts = urlObj.pathname.split('/').filter(Boolean);
   
   const kindMap = { "pelicula": "movie", "serie": "serie", "anime": "anime", "novela": "novel", "wwe": "wwe" };
   const routeKind = parts[0];
@@ -227,17 +231,25 @@ export async function episodes(ref) {
   const isMovie = apiKind === "movie" || apiKind === "wwe";
 
   if (isMovie) {
-    // Si es película, guardamos el iframe en la propiedad 'ref' para resolverlo luego
     episodesList.push({
       season: 1,
       number: 1,
       ref: item.player_url || ref, 
-      title: "Reproducir Película",
+      title: "Reproducir",
       overview: metadata.overview
     });
-    return { movie: metadata, episodes: episodesList };
+    
+    // TRUCO PARA KINO: Exponer metadata en la raíz para películas
+    return { 
+      overview: metadata.overview,
+      year: metadata.year,
+      poster: metadata.poster,
+      backdrop: metadata.backdrop,
+      genres: metadata.genres,
+      movie: metadata, 
+      episodes: episodesList 
+    };
   } else {
-    // Si es Serie o Anime, iteramos por temporadas y episodios mediante la API
     const itemId = item.catalog_item_id;
     const seasonsRes = await kino.fetch(`${API_URL}/episode-seasons?item_id=${itemId}`, { headers: reqHeaders });
     
@@ -250,7 +262,7 @@ export async function episodes(ref) {
         let page = 1;
         let hasNext = true;
         
-        while (page <= 200 && hasNext) { // Paginamos hasta 200 páginas por seguridad
+        while (page <= 200 && hasNext) {
           const epRes = await kino.fetch(`${API_URL}/episodes?item_id=${itemId}&season=${seasonNum}&limit=100&page=${page}`, { headers: reqHeaders });
           if (!epRes.ok) break;
           
@@ -263,7 +275,7 @@ export async function episodes(ref) {
             episodesList.push({
               season: seasonNum,
               number: ep.episode,
-              ref: ep.player_url || ref, // Aquí pasamos el iframe
+              ref: ep.player_url || ref,
               title: ep.title || `Episodio ${ep.episode}`,
               overview: ep.overview || "",
               still: getImgUrl(ep.still_path)
@@ -277,7 +289,17 @@ export async function episodes(ref) {
     }
     
     episodesList.sort((a, b) => (a.season - b.season) || (a.number - b.number));
-    return { series: metadata, episodes: episodesList };
+    
+    // TRUCO PARA KINO: Exponer metadata en la raíz para series
+    return { 
+      overview: metadata.overview,
+      year: metadata.year,
+      poster: metadata.poster,
+      backdrop: metadata.backdrop,
+      genres: metadata.genres,
+      series: metadata, 
+      episodes: episodesList 
+    };
   }
 }
 
@@ -368,7 +390,7 @@ export async function resolve(ref) {
       if (streamUrl) {
         // Truco para limpiar el enlace maestro
         if (streamUrl.includes('.urlset/master.m3u8')) {
-           streamUrl = streamUrl.replace(/,[a-z,]+\.urlset\/master\.m3u8/, 'h/index.m3u8');
+           //streamUrl = streamUrl.replace(/,[a-z,]+\.urlset\/master\.m3u8/, 'h/index.m3u8');
         }
 
         allStreams.push({
