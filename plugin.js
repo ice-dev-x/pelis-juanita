@@ -228,7 +228,7 @@ export async function episodes(ref) {
     genres: json.genres ? json.genres.map(g => g.title) : []
   };
 
-  const episodesList = [];
+ const episodesList = [];
   const isMovie = apiKind === "movie" || apiKind === "wwe";
 
   if (isMovie) {
@@ -237,11 +237,15 @@ export async function episodes(ref) {
       number: 1,
       ref: item.player_url || ref, 
       title: "Reproducir Película",
-      overview: metadata.overview // Lo inyectamos directo en el episodio también
+      overview: metadata.overview
     });
     
-    // EL TRUCO DE PREMIERE: Retornamos todo bajo la clave "series" para engañar a la UI del TV
-    return { series: metadata, episodes: episodesList };
+    // CORRECCIÓN: Enviar como "movie" y exponer el overview en la raíz
+    return { 
+      movie: metadata, 
+      overview: metadata.overview, 
+      episodes: episodesList 
+    };
     
   } else {
     const itemId = item.catalog_item_id;
@@ -283,7 +287,12 @@ export async function episodes(ref) {
     }
     
     episodesList.sort((a, b) => (a.season - b.season) || (a.number - b.number));
-    return { series: metadata, episodes: episodesList };
+    
+    // Para series se mantiene igual
+    return { 
+      series: metadata, 
+      episodes: episodesList 
+    };
   }
 }
 

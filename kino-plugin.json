@@ -1,7 +1,7 @@
 {
   "id": "pelis-juanita",
   "name": "Pelis Juanita",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "apiVersion": 6,
   "browser": true,
   "entry": "plugin.js",
