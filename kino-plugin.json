@@ -8,14 +8,14 @@
   "section": { "label": "Premiere" },
   "icon": "icon.png",
   "author": "sadmachine",
-  "description": "Peliculas y series; se puede elegir el idioma y subtitulos desde el botón (cc)",
-  "color": "#030000",
+  "description": "Peliculas y series; se puede elegir el idioma y subtitulos desde el botón (cc) en caso de que este disponible",
+  "color": "#000000",
   "theme": {
-    "accent": "#941320",
+    "accent": "#034f3c",
     "onAccent": "#ffffff",
-    "background": "#0f0f0f",
+    "background": "#0a0a0a",
     "surface": "#1a1a1a",
-    "highlight": "#f0ebeb"
+    "highlight": "#f0f0f0"
   },
   "hosts": [
     "pelisjuanita.org",
