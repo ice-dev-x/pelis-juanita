@@ -2,7 +2,7 @@ export const UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, li
 const BASE_URL = "https://pelisjuanita.org";
 const API_URL = "https://pelisjuanita.org/api/rest/v1";
 
-// Función para mapear imágenes desde TheMovieDB
+// Función para mapear imágenes desde TheMovieDB (igual que el código de Kotlin)
 function getImgUrl(path, size = "w500") {
   if (!path) return null;
   if (path.startsWith("http")) return path;
@@ -28,12 +28,12 @@ function extractItems(items) {
       poster: posterImg,
       backdrop: backdropImg,
       year: item.year ? parseInt(item.year, 10) : null,
-      overview: item.overview || item.description || ""
+      overview: item.overview || item.description || "" // El secreto que usaba Premiere
     };
   }).filter(i => i.ref !== null);
 }
 
-// --- HOME ---
+// --- HOME (Pantalla principal de la app clonando la API nativa) ---
 export async function home() {
   try {
     const res = await kino.fetch(`${API_URL}/home`, { 
@@ -45,6 +45,7 @@ export async function home() {
     const categories = [];
     const currentYear = new Date().getFullYear();
 
+    // Inyectamos manualmente la nueva fila "Estrenos del Año" al principio
     try {
       const yearRes = await kino.fetch(`${API_URL}/taxonomies/year/${currentYear}?page=1&limit=30`, { 
         headers: { "User-Agent": UA, "Referer": `${BASE_URL}/` } 
@@ -55,19 +56,22 @@ export async function home() {
           categories.push({
             id: `row-estrenos-year`,
             title: `Estrenos ${currentYear}`,
-            ref: `year-${currentYear}`, 
+            ref: `year-${currentYear}`, // Referencia dinámica para browse
             items: extractItems(yearJson.items)
           });
         }
       }
     } catch (e) {}
 
+    // Leemos el arreglo 'rows' que ya viene ordenado desde el servidor, OMITIENDO populares
     if (json.rows && Array.isArray(json.rows)) {
       for (const row of json.rows) {
         if (row.items && row.items.length > 0) {
+          
           let refTarget = "peliculas";
           const lowerTitle = String(row.title || "").toLowerCase();
           
+          // Omitimos la fila Popular
           if (lowerTitle.includes("popular")) continue;
 
           if (lowerTitle.includes("serie")) refTarget = "series";
@@ -129,6 +133,7 @@ export async function section({ tab } = {}) {
           heroItem = json.hero.items[0];
         }
 
+        // Inyectamos Estrenos del Año en Pestaña Inicio
         try {
           const yearItems = await fetchApiList(`${API_URL}/taxonomies/year/${currentYear}?page=1&limit=30`);
           if (yearItems.length > 0) {
@@ -147,6 +152,7 @@ export async function section({ tab } = {}) {
               let refTarget = "peliculas";
               const lowerTitle = String(row.title || "").toLowerCase();
               
+              // Omitimos la fila Popular
               if (lowerTitle.includes("popular")) continue;
 
               if (lowerTitle.includes("serie")) refTarget = "series";
@@ -201,7 +207,7 @@ export async function section({ tab } = {}) {
   return { tabs, tab: chosen, hero, rows };
 }
 
-// --- BROWSE ---
+// --- BROWSE (Paginación) ---
 export async function browse(ref, cursor) {
   const page = cursor ? parseInt(cursor, 10) : 1;
   const category = ref || "peliculas"; 
@@ -216,6 +222,8 @@ export async function browse(ref, cursor) {
     apiUrl = `${API_URL}/listing?order=popular&limit=24&page=${page}`;
   }
   else if (category === "genre-estrenos") {
+    // Nota: la API original para 'genre-estrenos' podría ser la que habíamos configurado antes. 
+    // Usaremos trending_7d para emular "Últimos Estrenos" si es la fila de la página de inicio.
     apiUrl = `${API_URL}/listing?kind=movie&order=trending_7d&limit=24&page=${page}`;
   }
   else if (category.startsWith("genre-")) {
@@ -223,6 +231,7 @@ export async function browse(ref, cursor) {
     apiUrl = `${API_URL}/taxonomies/genre/${genreName}?page=${page}&limit=30`;
   } 
   else if (category.startsWith("year-")) {
+    // Interceptamos la nueva categoría Estrenos del Año
     const yearValue = category.replace("year-", "");
     apiUrl = `${API_URL}/taxonomies/year/${yearValue}?page=${page}&limit=30`;
   }
@@ -239,7 +248,6 @@ export async function browse(ref, cursor) {
     next: (json.pagination && json.pagination.has_next) ? String(page + 1) : null 
   };
 }
-
 // --- BUSCADOR ---
 export async function search(query) {
   if (!query || !query.q) return [];
@@ -257,6 +265,8 @@ export async function search(query) {
   
   return [];
 }
+
+
 
 // --- METADATOS Y EPISODIOS ---
 export async function episodes(ref) {
@@ -276,6 +286,7 @@ export async function episodes(ref) {
   const json = await res.json();
   const item = json.item;
   
+  // 1. Armamos la metadata idéntica a Premiere
   const metadata = {
     overview: item.overview || "",
     year: item.year ? parseInt(item.year, 10) : null,
@@ -296,8 +307,8 @@ export async function episodes(ref) {
       overview: metadata.overview
     });
     
+    // Esparcimos la metadata en la raíz para garantizar que Kino la lea
     return { 
-      movie: metadata, 
       overview: metadata.overview,
       year: metadata.year,
       poster: metadata.poster,
@@ -347,6 +358,7 @@ export async function episodes(ref) {
     
     episodesList.sort((a, b) => (a.season - b.season) || (a.number - b.number));
     
+    // Para series se mantiene igual
     return { 
       series: metadata, 
       episodes: episodesList 
@@ -354,10 +366,10 @@ export async function episodes(ref) {
   }
 }
 
-// --- EXTRACTOR DE VIDEO MULTI-SERVIDOR ---
 export async function resolve(ref) {
   let initialUrl = ref;
 
+  // 1. Autodetección si pasas la URL pública
   if (ref.includes("/pelicula/") || ref.includes("/serie/") || ref.includes("/anime/") || ref.includes("/wwe/")) {
     const urlObj = new URL(ref);
     const parts = urlObj.pathname.split('/').filter(Boolean);
@@ -379,8 +391,10 @@ export async function resolve(ref) {
   }
 
   const visited = new Set();
-  const allStreams = []; 
+  const allStreams = [];    // Aquí guardaremos todas las opciones para el botón HQ
+  const allSubtitles = [];  // Aquí guardaremos los subtítulos para el botón CC
 
+  // 2. Función recursiva modificada para recolectar TODO
   async function extractVideo(url, referer, depth) {
     if (depth > 3 || visited.has(url)) return; 
     visited.add(url);
@@ -390,7 +404,6 @@ export async function resolve(ref) {
     const originMatch = url.match(/^(https?:\/\/[^\/]+)/i);
     const currentOrigin = originMatch ? originMatch[1] : url;
     const reqHeaders = { "User-Agent": UA, "Referer": referer };
-    
     const hostName = new URL(currentOrigin).hostname.replace('www.', '');
 
     try {
@@ -398,6 +411,17 @@ export async function resolve(ref) {
       if (!res.ok) return;
       const html = await res.text();
 
+      // Buscar subtítulos en el HTML (.vtt o .srt)
+      const subRegex = /(?:file|src|url)["']?\s*:\s*["'](https?:\/\/[^"']+\.(?:vtt|srt)[^"']*)["']/gi;
+      let subMatch;
+      while ((subMatch = subRegex.exec(html)) !== null) {
+        const subUrl = subMatch[1];
+        if (!allSubtitles.find(s => s.url === subUrl)) {
+          allSubtitles.push({ label: `Subtítulo ${allSubtitles.length + 1}`, url: subUrl });
+        }
+      }
+
+      // Buscar Video Directo
       const findStream = (code) => {
         const m = code.match(/(?:file|src|url)["']?\s*:\s*["'](https?:\/\/[^"']+\.(?:m3u8|mp4|mpd)[^"']*)["']/i) || 
                   code.match(/https?:\/\/[^\s"'\\<>]+?\.(?:m3u8|mp4|mpd)(?:\?[^\s"'\\<>]*)?/i);
@@ -406,6 +430,7 @@ export async function resolve(ref) {
 
       let streamUrl = findStream(html);
 
+      // Desencriptar scripts protegidos si es necesario
       if (!streamUrl) {
         const scripts = html.match(/<script[^>]*>([\s\S]*?)<\/script>/gi);
         if (scripts) {
@@ -424,15 +449,22 @@ export async function resolve(ref) {
         }
       }
 
+      // SI ENCUENTRA VIDEO, LO GUARDA EN EL ARREGLO Y TERMINA ESTA RAMA
       if (streamUrl) {
-        allStreams.push({ 
-          label: hostName, 
-          url: streamUrl, 
-          headers: { "User-Agent": UA, "Referer": currentOrigin + "/", "Origin": currentOrigin } 
+        // Truco para limpiar el enlace maestro
+        if (streamUrl.includes('.urlset/master.m3u8')) {
+           //streamUrl = streamUrl.replace(/,[a-z,]+\.urlset\/master\.m3u8/, 'h/index.m3u8');
+        }
+
+        allStreams.push({
+          label: `${hostName}`, // Nombre que saldrá en el menú HQ
+          url: streamUrl,
+          headers: { "User-Agent": UA, "Referer": currentOrigin + "/", "Origin": currentOrigin }
         });
         return; 
       }
 
+      // Si no hay video, busca iframes internos y botones para seguir explorando
       const iframeRegex = /<iframe[^>]+src=["'](http[^"']+)["']/gi;
       let iframeMatch;
       while ((iframeMatch = iframeRegex.exec(html)) !== null) {
@@ -447,18 +479,24 @@ export async function resolve(ref) {
         await extractVideo(nextUrl, currentOrigin + "/", depth + 1);
       }
 
-    } catch (e) {}
+    } catch (e) {
+      kino.log(`[Error] Fallo al explorar ${url}: ${e.message}`);
+    }
   }
 
+  // 3. Ejecutamos la búsqueda (ahora no se detiene, junta todos los servidores)
   await extractVideo(initialUrl, "https://pelisjuanita.org/", 0);
 
+  // 4. CONSTRUCCIÓN DE LA RESPUESTA FINAL CON HQ Y CC
   if (allStreams.length > 0) {
-    const primary = allStreams[0];
+    const primary = allStreams[0]; // El primer video inicia por defecto
+    
     const finalResponse = {
       url: primary.url,
       headers: primary.headers
     };
 
+    // Si encontró más de un servidor, llena el botón HQ
     if (allStreams.length > 1) {
       finalResponse.alternatives = allStreams.slice(1).map(s => ({
         label: s.label,
@@ -467,17 +505,13 @@ export async function resolve(ref) {
       }));
     }
 
+    // Si encontró subtítulos, llena el botón CC
+    if (allSubtitles.length > 0) {
+      finalResponse.subtitles = allSubtitles;
+    }
+
     return finalResponse;
   }
 
-  // Si no se encontró nada por HTTP, usamos el navegador como último recurso
-  try {
-    const page = await kino.browser.capture(initialUrl, { timeoutMs: 25000 });
-    if (page && page.media && page.media.length > 0) {
-      const validMedia = page.media.find(m => m.url.includes('.m3u8') || m.url.includes('.mp4')) || page.media[0];
-      return { url: validMedia.url, headers: validMedia.headers || { "User-Agent": UA, "Referer": initialUrl } };
-    }
-  } catch(e) {}
-
-  throw kino.error("unavailable", "No se pudo extraer el video. Los servidores pueden estar caídos.");
+  throw kino.error("unavailable", "No se pudo extraer el video. Los iframes internos pueden estar protegidos o caídos.");
 }
