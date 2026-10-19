@@ -1,21 +1,21 @@
 {
   "id": "pelis-juanita",
-  "name": "Pelis Juanita",
-  "version": "0.2.1",
+  "name": "Premiere",
+  "version": "0.2.2",
   "apiVersion": 6,
   "browser": true,
   "entry": "plugin.js",
-  "section": { "label": "Pelis Juanita" },
+  "section": { "label": "Premiere" },
   "icon": "icon.png",
   "author": "sadmachine",
   "description": "Peliculas y series; se puede elegir el idioma y subtitulos desde el botón (cc)",
-  "color": "#bd1439",
+  "color": "#030000",
   "theme": {
-    "accent": "#bd1439",
+    "accent": "#941320",
     "onAccent": "#ffffff",
-    "background": "#0a0a0a",
+    "background": "#0f0f0f",
     "surface": "#1a1a1a",
-    "highlight": "#f0f0f0"
+    "highlight": "#f0ebeb"
   },
   "hosts": [
     "pelisjuanita.org",
